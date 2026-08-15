@@ -81,6 +81,7 @@
     var p = activeProvider();
     el.textContent = engineLabel();
     el.className = (p === '' ? 'engine-weak' : 'engine-good');
+    refreshSetupPrompt();
   }
 
   function activeProvider() {
@@ -96,7 +97,22 @@
     if (p === 'bridge') return 'local Vision bridge';
     if (p === 'gemini') return 'Gemini';
     if (p === 'anthropic') return 'Claude';
+    /*
+     * "offline reader" is true but useless on a fresh install: the chosen engine
+     * is Gemini and the only thing missing is the key. Say that instead, because
+     * the fix is a setting rather than a different choice.
+     */
+    if (store.get('provider', 'gemini') === 'gemini') return 'no key yet';
     return 'offline reader';
+  }
+
+  /* Prompt for setup when an engine is chosen but unusable. */
+  function refreshSetupPrompt() {
+    var box = $('#setup-prompt');
+    if (!box) return;
+    var needsKey = store.get('provider', 'gemini') === 'gemini' &&
+                   !store.get('key', '') && !bridgeDetected;
+    box.hidden = !needsKey;
   }
 
   function showError(msg) {
@@ -189,6 +205,7 @@
     toast('Key forgotten.');
   });
   $('#btn-settings').addEventListener('click', function () { show('settings'); });
+  $('#btn-goto-setup').addEventListener('click', function () { show('settings'); });
 
   // ------------------------------------------------------------ image input
 
