@@ -1,0 +1,10 @@
+# Files that should not be served by the Cloudflare deployment.
+# Development-only tooling and test material — public in the repo, but no reason
+# to sit on the CDN or count against upload limits.
+tools/
+test/
+run-tests.sh
+wrangler.jsonc
+.assetsignore
+.gitignore
+README.md

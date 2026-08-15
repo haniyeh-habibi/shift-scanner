@@ -1,0 +1,15 @@
+{
+  // Static-asset-only Worker: no server code, just the files in this repo.
+  // Cloudflare now steers new projects to Workers rather than Pages, and the
+  // dashboard's default build command (`npx wrangler deploy`) needs this file
+  // to know what to upload.
+  //
+  // GitHub Pages serves the same repo with no config at all; this exists purely
+  // so the Cloudflare deployment works from the same source of truth.
+  "name": "shift-scanner",
+  "compatibility_date": "2026-08-15",
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "single-page-application"
+  }
+}
