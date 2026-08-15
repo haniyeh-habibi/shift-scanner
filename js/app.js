@@ -782,12 +782,26 @@
     try {
       var how = await ICS.deliver(built.text, name);
       if (how === 'cancelled') return;
-      $('#done-title').textContent = how === 'shared' ? 'Sent to Calendar' : 'File saved';
-      $('#done-note').textContent = how === 'shared'
-        ? 'Choose Calendar in the share sheet, then tap Add All. ' +
-          built.count + ' event' + (built.count === 1 ? '' : 's') + ' ready.'
-        : 'Open the downloaded file to add ' + built.count + ' event' +
-          (built.count === 1 ? '' : 's') + ' to your calendar.';
+      /*
+       * Two genuinely different endings, so say which one happened.
+       *
+       * Handing the file straight to Calendar needs navigator.share with file
+       * support: iPhone Safari has it, desktop Safari does not. On a Mac the file
+       * is downloaded instead, and "open the downloaded file" was too vague to
+       * act on — it reads like the app failed rather than that a file is waiting.
+       */
+      var n = built.count + ' shift' + (built.count === 1 ? '' : 's');
+      if (how === 'shared') {
+        $('#done-title').textContent = 'Sent to Calendar';
+        $('#done-note').textContent = 'Choose Calendar in the share sheet, then tap ' +
+          'Add All. ' + n + ' ready.';
+      } else {
+        $('#done-title').textContent = 'Downloaded — one step left';
+        $('#done-note').textContent = 'Your Mac cannot hand the file straight to ' +
+          'Calendar, so ' + n + ' were saved as "' + name + '" in your Downloads. ' +
+          'Double-click it and Calendar will offer to add them. On an iPhone this ' +
+          'step does not happen — the share sheet opens Calendar directly.';
+      }
       show('done');
     } catch (err) {
       console.error(err);
