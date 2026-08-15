@@ -113,9 +113,14 @@
   <section class="screen" id="screen-done">
     <div class="body centered">
       <div class="tick" aria-hidden="true">&#10003;</div>
-      <h2 id="done-title">Sent to Calendar</h2>
+      <h2 id="done-title">Ready for Calendar</h2>
       <p class="hint hint-centered" id="done-note"></p>
-      <button class="btn btn-primary" data-back="home">Scan another week</button>
+
+      <div class="actions" style="width:min(340px,86vw)">
+        <a class="btn btn-primary" id="btn-open-ics" href="#" target="_blank" rel="noopener">Open in Calendar</a>
+        <button class="btn" id="btn-share-ics">Share the file instead</button>
+        <button class="link-btn" style="text-align:center" data-back="home">Scan another week</button>
+      </div>
     </div>
   </section>
 

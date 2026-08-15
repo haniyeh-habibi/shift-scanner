@@ -766,46 +766,66 @@
 
   // -------------------------------------------------------------- calendar
 
-  $('#btn-add').addEventListener('click', async function () {
+  /*
+   * Getting an .ics into iOS Calendar is fiddlier than it looks.
+   *
+   * navigator.share was the original route, but iOS Calendar is not a share-sheet
+   * target for .ics files — the sheet offers AirDrop, Messages and Save to Files,
+   * and the user is left holding a file. What actually works is *opening* the
+   * file, which makes iOS show Calendar's "Add All" sheet.
+   *
+   * So opening is the primary action and sharing is the fallback, and both are
+   * offered rather than guessed at, because they differ per platform and neither
+   * can be feature-detected reliably.
+   */
+  function prepareDelivery() {
     var built = ICS.build(state.shifts, {
       person: state.person,
       title: store.get('title', 'Work shift') || 'Work shift',
       breakMode: store.get('break', 'notes'),
       calendarName: 'Shifts'
     });
-
-    if (!built.count) { toast('No shifts selected.'); return; }
+    if (!built.count) return null;
 
     var first = state.shifts.filter(function (s) { return s.include && s.start; })[0];
-    var name = 'shifts-' + (first ? isoDate(first.date) : 'week') + '.ics';
+    var filename = 'shifts-' + (first ? isoDate(first.date) : 'week') + '.ics';
+    var blob = new Blob([built.text], { type: 'text/calendar;charset=utf-8' });
 
+    if (state.icsURL) URL.revokeObjectURL(state.icsURL);
+    state.icsURL = URL.createObjectURL(blob);
+
+    return { built: built, blob: blob, filename: filename, url: state.icsURL };
+  }
+
+  $('#btn-add').addEventListener('click', function () {
+    var d = prepareDelivery();
+    if (!d) { toast('No shifts selected.'); return; }
+
+    var n = d.built.count + ' shift' + (d.built.count === 1 ? '' : 's');
+    var link = $('#btn-open-ics');
+    link.href = d.url;
+    link.setAttribute('download', d.filename);
+
+    $('#done-title').textContent = n + ' ready';
+    $('#done-note').textContent =
+      'Tap Open in Calendar, then Add All. If nothing happens, use Share and ' +
+      'choose Save to Files, then open ' + d.filename + ' from Files.';
+    show('done');
+  });
+
+  $('#btn-share-ics').addEventListener('click', async function () {
+    var d = prepareDelivery();
+    if (!d) { toast('No shifts selected.'); return; }
     try {
-      var how = await ICS.deliver(built.text, name);
-      if (how === 'cancelled') return;
-      /*
-       * Two genuinely different endings, so say which one happened.
-       *
-       * Handing the file straight to Calendar needs navigator.share with file
-       * support: iPhone Safari has it, desktop Safari does not. On a Mac the file
-       * is downloaded instead, and "open the downloaded file" was too vague to
-       * act on — it reads like the app failed rather than that a file is waiting.
-       */
-      var n = built.count + ' shift' + (built.count === 1 ? '' : 's');
-      if (how === 'shared') {
-        $('#done-title').textContent = 'Sent to Calendar';
-        $('#done-note').textContent = 'Choose Calendar in the share sheet, then tap ' +
-          'Add All. ' + n + ' ready.';
-      } else {
-        $('#done-title').textContent = 'Downloaded — one step left';
-        $('#done-note').textContent = 'Your Mac cannot hand the file straight to ' +
-          'Calendar, so ' + n + ' were saved as "' + name + '" in your Downloads. ' +
-          'Double-click it and Calendar will offer to add them. On an iPhone this ' +
-          'step does not happen — the share sheet opens Calendar directly.';
+      var file = new File([d.blob], d.filename, { type: 'text/calendar' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Shifts' });
+        return;
       }
-      show('done');
+      toast('Sharing is not available here — use Open in Calendar.', 5000);
     } catch (err) {
-      console.error(err);
-      toast('Could not hand the file over: ' + (err.message || err), 5000);
+      if (err && err.name === 'AbortError') return;
+      toast('Could not share: ' + (err.message || err), 5000);
     }
   });
 
