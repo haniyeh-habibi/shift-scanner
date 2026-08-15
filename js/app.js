@@ -782,8 +782,13 @@
     var built = ICS.build(state.shifts, {
       person: state.person,
       title: store.get('title', 'Work shift') || 'Work shift',
-      breakMode: store.get('break', 'notes'),
-      calendarName: 'Shifts'
+      breakMode: store.get('break', 'notes')
+      /*
+       * Deliberately no calendarName. X-WR-CALNAME makes some clients create a
+       * separate calendar for the import, which then has to be found and enabled
+       * before the shifts are visible at all. Without it the events land in
+       * whichever calendar the user picks on import, which is what was asked for.
+       */
     });
     if (!built.count) return null;
 
