@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Shift Scanner</title>
+<meta name="description" content="Photograph a shift rota and add your shifts to Apple Calendar.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1f6feb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Shifts">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ---------------------------------------------------------- home -->
+  <section class="screen is-active" id="screen-home">
+    <header class="hdr">
+      <h1>Shift Scanner</h1>
+      <button class="icon-btn" id="btn-settings" aria-label="Settings">&#9881;</button>
+    </header>
+
+    <div class="body">
+      <label class="field">
+        <span class="field-label">Your name on the rota</span>
+        <input type="text" id="input-name" placeholder="e.g. Amelia" autocomplete="name"
+               autocapitalize="words" spellcheck="false">
+        <span class="field-hint">First name is usually enough. Spelling doesn't have to be exact.</span>
+      </label>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-camera">Take a photo of the rota</button>
+        <button class="btn" id="btn-library">Choose from Photos</button>
+      </div>
+
+      <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
+      <input type="file" id="file-library" accept="image/*" hidden>
+
+      <p class="engine-line">Reading with <strong id="engine-name">…</strong></p>
+
+      <div class="note" id="install-hint" hidden>
+        <strong>Add to Home Screen</strong>
+        Tap Share, then <em>Add to Home Screen</em>, to keep this as an app icon that works offline.
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- crop -->
+  <section class="screen" id="screen-crop">
+    <header class="hdr">
+      <button class="link-btn" data-back="home">Cancel</button>
+      <h2>Line up the table</h2>
+      <span class="hdr-spacer"></span>
+    </header>
+
+    <div class="body body-flush">
+      <div id="crop-error" class="warn warn-selectable" hidden></div>
+      <p class="hint">Drag the four dots onto the corners of the <strong>table</strong>. Straightening it here is what makes the reading accurate — but keep every day column and the names inside the box, or those shifts go missing.</p>
+      <div class="crop-wrap" id="crop-wrap">
+        <canvas id="crop-canvas"></canvas>
+        <svg id="crop-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="actions actions-sticky">
+        <button class="btn" id="btn-reset-corners">Reset corners</button>
+        <button class="btn btn-primary" id="btn-read">Read the rota</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------- progress -->
+  <section class="screen" id="screen-progress">
+    <div class="body centered">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="progress-label" id="progress-label">Starting up…</p>
+      <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+      <p class="hint hint-centered" id="progress-sub">The first run downloads the text engine, about 6&nbsp;MB. After that it works offline.</p>
+      <button class="link-btn" data-back="home">Cancel</button>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------- review -->
+  <section class="screen" id="screen-review">
+    <header class="hdr">
+      <button class="link-btn" data-back="home">Back</button>
+      <h2>Check your shifts</h2>
+      <span class="hdr-spacer"></span>
+    </header>
+
+    <div class="body">
+      <div id="review-warnings"></div>
+      <div id="review-week" class="week"></div>
+
+      <div class="actions actions-sticky">
+        <button class="btn btn-primary" id="btn-add">Add to Calendar</button>
+        <button class="link-btn" id="btn-recrop">Re-adjust the photo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- done -->
+  <section class="screen" id="screen-done">
+    <div class="body centered">
+      <div class="tick" aria-hidden="true">&#10003;</div>
+      <h2 id="done-title">Sent to Calendar</h2>
+      <p class="hint hint-centered" id="done-note"></p>
+      <button class="btn btn-primary" data-back="home">Scan another week</button>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------- settings -->
+  <section class="screen" id="screen-settings">
+    <header class="hdr">
+      <button class="link-btn" data-back="home">Done</button>
+      <h2>Settings</h2>
+      <span class="hdr-spacer"></span>
+    </header>
+
+    <div class="body">
+      <label class="field">
+        <span class="field-label">Event title</span>
+        <input type="text" id="input-title" placeholder="Work shift">
+      </label>
+
+      <fieldset class="field">
+        <legend class="field-label">Breaks</legend>
+        <label class="radio"><input type="radio" name="brk" value="notes" checked> In the event notes</label>
+        <label class="radio"><input type="radio" name="brk" value="events"> As separate events</label>
+        <label class="radio"><input type="radio" name="brk" value="ignore"> Ignore them</label>
+      </fieldset>
+
+      <h3 class="section-head">Reading the rota</h3>
+
+      <label class="field">
+        <span class="field-label">Engine</span>
+        <select id="input-provider">
+          <option value="gemini">Google Gemini — needs a free key</option>
+          <option value="">Offline reader — no key, much less accurate</option>
+          <option value="anthropic">Anthropic Claude — needs a paid key</option>
+          <option value="bridge">Local Vision bridge — testing on a Mac only</option>
+        </select>
+      </label>
+
+      <div id="gemini-setup">
+        <ol class="steps">
+          <li>Open <a href="https://aistudio.google.com/apikey" target="_blank"
+              rel="noopener noreferrer">aistudio.google.com/apikey</a></li>
+          <li>Sign in with any Google account and tap <strong>Create API key</strong></li>
+          <li>Copy it and paste it below</li>
+        </ol>
+
+        <label class="field">
+          <span class="field-label">Your Gemini API key</span>
+          <input type="password" id="input-key" placeholder="AIza…" autocomplete="off"
+                 spellcheck="false" autocapitalize="none">
+        </label>
+
+        <div class="actions">
+          <button class="btn" id="btn-test-key">Check the key works</button>
+        </div>
+        <p class="hint" id="key-status"></p>
+
+        <div class="note">
+          <strong>It is your key, and it stays on this phone.</strong>
+          Requests go straight from here to Google using your own free account.
+          Nothing is routed through anyone else, and no key is ever sent to us.
+        </div>
+
+        <div class="warn">
+          <strong>The photo does leave your phone.</strong>
+          It goes to Google to be read, and a rota shows your colleagues' names and
+          hours as well as your own. On the free tier Google may use submitted data
+          to improve their models. The offline reader never sends anything, but is
+          much less accurate on these sheets.
+        </div>
+      </div>
+
+      <button class="btn btn-danger-quiet" id="btn-clear-key">Forget key</button>
+
+      <p class="version">Shift Scanner · works offline · <span id="cache-state">checking…</span></p>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="vendor/tesseract.min.js"></script>
+<script src="js/grid.js"></script>
+<script src="js/warp.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/ics.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
