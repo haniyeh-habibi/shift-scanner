@@ -10,6 +10,9 @@
   "compatibility_date": "2026-08-15",
   "assets": {
     "directory": "./",
-    "not_found_handling": "single-page-application"
+    // Not "single-page-application": this app has no client-side routing, so that
+    // setting only turns real 404s into 200s serving index.html — which made it
+    // look as though .assetsignore had failed when it had not.
+    "not_found_handling": "none"
   }
 }
