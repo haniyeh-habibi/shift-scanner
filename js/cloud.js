@@ -94,11 +94,31 @@
     return [pinned].concat(GEMINI_MODELS.filter(function (m) { return m !== pinned; }));
   }
 
-  /* Errors worth trying the next model for, rather than giving up. */
+  /* This model does not exist for this account — the next one might. */
   function isModelUnavailable(status, message) {
     if (status === 404) return true;
     return /no longer available|not found|does not exist|not supported|unsupported model/i
       .test(message || '');
+  }
+
+  /*
+   * The model exists but is busy. Worth trying a different one, since capacity is
+   * per-model, and worth retrying after a pause if they are all busy. Distinct
+   * from a quota error, where retrying is pointless and rude.
+   */
+  function isOverloaded(status, message) {
+    if (status === 503) return true;
+    return /high demand|overloaded|try again later|UNAVAILABLE|temporarily/i
+      .test(message || '');
+  }
+
+  function isQuotaExhausted(status, message) {
+    if (status === 429) return true;
+    return /RESOURCE_EXHAUSTED|quota|rate limit/i.test(message || '');
+  }
+
+  function wait(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
   }
 
   function geminiURL(model, key) {
@@ -106,34 +126,65 @@
            model + ':generateContent?key=' + encodeURIComponent(key);
   }
 
-  async function geminiRequest(key, body) {
+  /*
+   * Two passes over the model list. The first tries each model once; anything
+   * busy is noted and skipped rather than failing the whole scan, because
+   * capacity is per-model. If every model was busy, pause and sweep once more —
+   * these spikes are usually short. A bad key or an exhausted quota still stops
+   * immediately, since retrying those is pointless.
+   */
+  async function geminiRequest(key, body, onNote) {
     var models = candidateModels();
     var lastError = 'no models tried';
+    var sawOverload = false;
 
-    for (var i = 0; i < models.length; i++) {
-      var res = await fetch(geminiURL(models[i], key), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (res.ok) {
-        localStorage.setItem('ss.geminiModel', models[i]);
-        return { json: await res.json(), model: models[i] };
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt === 1) {
+        if (!sawOverload) break;
+        if (onNote) onNote('Gemini is busy — waiting a moment and retrying…');
+        await wait(4000);
       }
 
-      var j = await res.json().catch(function () { return {}; });
-      var msg = (j.error && j.error.message) || ('HTTP ' + res.status);
-      lastError = msg;
+      for (var i = 0; i < models.length; i++) {
+        var res = await fetch(geminiURL(models[i], key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
 
-      if (!isModelUnavailable(res.status, msg)) {
-        throw new Error(msg);            // a key or quota problem: stop here
+        if (res.ok) {
+          localStorage.setItem('ss.geminiModel', models[i]);
+          return { json: await res.json(), model: models[i] };
+        }
+
+        var j = await res.json().catch(function () { return {}; });
+        var msg = (j.error && j.error.message) || ('HTTP ' + res.status);
+        lastError = msg;
+
+        if (isQuotaExhausted(res.status, msg)) {
+          throw new Error('Your Gemini quota is used up for now. The free tier ' +
+                          'resets after a while — try again later. (' + msg + ')');
+        }
+        if (isOverloaded(res.status, msg)) {
+          sawOverload = true;
+          continue;                       // a different model may have capacity
+        }
+        if (isModelUnavailable(res.status, msg)) {
+          continue;                       // not available to this account
+        }
+        throw new Error(msg);             // a key problem: stop here
       }
+    }
+
+    if (sawOverload) {
+      throw new Error('Gemini is busy right now and every model was unavailable. ' +
+                      'This is usually brief — wait a minute and scan again. ' +
+                      'Your shifts have not been added.');
     }
     throw new Error('No available Gemini model. Last response: ' + lastError);
   }
 
-  async function callGemini(key, b64, userPrompt) {
+  async function callGemini(key, b64, userPrompt, onNote) {
     var out = await geminiRequest(key, {
       contents: [{
         parts: [
@@ -142,7 +193,7 @@
         ]
       }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0 }
-    });
+    }, onNote);
     var c = out.json && out.json.candidates && out.json.candidates[0];
     var parts = c && c.content && c.content.parts;
     return extractJSON(parts && parts.map(function (p) { return p.text || ''; }).join(''));
@@ -229,7 +280,7 @@
   }
 
   /* Returns { person, shifts, warnings } in the same shape as the offline path. */
-  async function readWeek(canvas, personName, providerOverride) {
+  async function readWeek(canvas, personName, providerOverride, onNote) {
     var s = settings();
     if (providerOverride) s.provider = providerOverride;
     if (!s.key) {
@@ -243,7 +294,7 @@
 
     var out = s.provider === 'anthropic'
       ? await callAnthropic(s.key, b64, prompt)
-      : await callGemini(s.key, b64, prompt);
+      : await callGemini(s.key, b64, prompt, onNote);
 
     if (!out) throw new Error('The model did not return readable JSON.');
 

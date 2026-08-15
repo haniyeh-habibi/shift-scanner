@@ -463,7 +463,9 @@
     setProgress('Reading the rota…', 0.4,
                 'Sending to ' + (provider === 'anthropic' ? 'Claude' : 'Gemini') +
                 ' using your own key.');
-    return await Cloud.readWeek(flat, name, provider);
+    return await Cloud.readWeek(flat, name, provider, function (note) {
+      setProgress('Reading the rota…', 0.5, note);
+    });
   }
 
   async function runOffline(flat, name) {
