@@ -849,8 +849,25 @@
   if (isIOS && !standalone) $('#install-hint').hidden = false;
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').then(function () {
+    /*
+     * Reload once when a new service worker takes over.
+     *
+     * Without this a phone can sit on a cached build indefinitely: the HTTP cache
+     * holds the old index.html, the user sees none of the fixes, and the only
+     * remedy is knowing to append a query string. Reloading on controllerchange
+     * makes an update arrive by itself on the next visit.
+     */
+    var reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
       $('#cache-state').textContent = 'ready for offline use';
+      reg.update();                                  // check on every launch
+      setInterval(function () { reg.update(); }, 60 * 60 * 1000);
     }).catch(function () {
       $('#cache-state').textContent = 'offline mode unavailable';
     });

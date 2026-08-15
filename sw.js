@@ -5,7 +5,7 @@
  * install: after the first visit the app opens and reads rotas with no signal at
  * all, which matters in a stockroom.
  */
-var VERSION = 'v3';
+var VERSION = 'v4';
 var CACHE = 'shift-scanner-' + VERSION;
 
 var PRECACHE = [
